@@ -24,6 +24,9 @@ pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
 
+use crate::mm::{VirtAddr,PhysAddr,PageTable,MapPermission};
+use crate::config::PAGE_SIZE;
+
 /// The task manager, where all the tasks are managed.
 ///
 /// Functions implemented on `TaskManager` deals with all task state transitions
@@ -153,6 +156,57 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    /// Add syscall times
+    fn syscall_counts(&self, id:usize){
+        let mut inner=self.inner.exclusive_access();
+        let current=inner.current_task;
+        inner.tasks[current].syscall_counts[id]+=1;
+    }
+    /// get syscall times
+    fn get_syscall_counts(&self, id:usize)->usize{
+        let inner=self.inner.exclusive_access();
+        let task=inner.current_task;
+        inner.tasks[task].syscall_counts[id]
+    }
+    /// mmap
+    fn mmap(&self,start: usize, len: usize, port: usize)->isize {
+        if start % PAGE_SIZE != 0 {
+        return -1;
+        }
+
+        // prot & !0x7 != 0 
+        // prot & 0x7 == 0
+        if (port & !0x7 != 0) || (port & 0x7 == 0) {
+            return -1;
+        }
+
+        // prot: bit 0 (R), 1 (W), 2 (X)
+        // MapPermission: R=1<<1, W=1<<2, X=1<<3, U=1<<4
+        let mut permission = MapPermission::U;
+        if (port & 1) != 0 { permission |= MapPermission::R; }
+        if (port & 2) != 0 { permission |= MapPermission::W; }
+        if (port & 4) != 0 { permission |= MapPermission::X; }
+
+        let mut inner = TASK_MANAGER.inner.exclusive_access();
+        let task=inner.current_task;
+        
+        // 长度向上对齐
+        let len_aligned = (len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        
+        inner.tasks[task].memory_set.mmap(start, len_aligned, permission)
+    }
+    /// munmap
+    fn munmap(&self,start: usize, len: usize)->isize{
+        if start % PAGE_SIZE !=0{
+        return -1;
+        }
+        let len_aligned = ( len + PAGE_SIZE - 1) & !(PAGE_SIZE-1);
+
+        let mut inner=TASK_MANAGER.inner.exclusive_access();
+        let task=inner.current_task;
+        inner.tasks[task].memory_set.munmap(start, len_aligned)
+    }
 }
 
 /// Run the first task in task list.
@@ -201,4 +255,95 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Add syscall times
+pub fn syscall_counts(id:usize){
+    TASK_MANAGER.syscall_counts(id);
+}
+
+/// get syscall times
+pub fn get_syscall_counts(id:usize)->usize {
+    TASK_MANAGER.get_syscall_counts(id)
+}
+
+/// sys_trace
+pub fn task_sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
+    let token = current_user_token();
+    let page_table = PageTable::from_token(token);
+
+    match trace_request {
+        // 功能 0: 读内存 (User, Readable)
+        0 => {
+            let va = VirtAddr::from(id);
+            let vpn = va.floor();
+            
+            if let Some(pte) = page_table.translate(vpn) {
+                // 必须是有效的、用户态的、可读的
+                if !pte.is_valid() || !pte.readable() || !pte.user(){
+                    return -1;
+                }
+                
+                let offset = va.page_offset();
+                let pa:PhysAddr = pte.ppn().into();
+                let target_pa = PhysAddr::from(pa.0 + offset);
+                
+             
+                    // 读取一个字节
+                    let val = *target_pa.get_mut::<u8>();
+                    val as isize
+                
+            } else {
+                -1
+            }
+        },
+        
+        // 功能 1: 写内存 (User, Writable)
+        1 => {
+            let va = VirtAddr::from(id);
+            let vpn = va.floor();
+            
+            if let Some(pte) = page_table.translate(vpn) {
+                // 必须是有效的、用户态的、可写的
+                if !pte.is_valid() || !pte.writable() || !pte.user() {
+                    return -1;
+                }
+                
+                let offset = va.page_offset();
+                let pa:PhysAddr = pte.ppn().into();
+                let target_pa = PhysAddr::from(pa.0 + offset);
+                
+
+                    *target_pa.get_mut::<u8>() = data as u8;
+                
+                0
+            } else {
+                -1
+            }
+        },
+        
+        // 功能 2: 查询系统调用次数 (必须保留!)
+        // 如果你的 TaskControlBlockInner 中没有 syscall_times 字段，需要在那里加上
+        2 => {
+            let inner = TASK_MANAGER.inner.exclusive_access();
+            let task=inner.current_task;
+            if id < inner.tasks[task].syscall_counts.len() {
+                inner.tasks[task].syscall_counts[id] as isize
+            } else {
+                -1
+            }
+        },
+        
+        _ => -1,
+    }
+}
+
+/// map from start to strat+len with permission port
+pub fn mmap(start: usize, len: usize, port: usize)->isize {
+    TASK_MANAGER.mmap(start, len, port)
+}
+
+/// the counter of map
+pub fn munmap(start: usize, len: usize)->isize {
+    TASK_MANAGER.munmap(start, len)
 }
