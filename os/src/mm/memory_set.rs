@@ -341,6 +341,35 @@ impl MemorySet {
         }
         -1
     }
+    /// Decide if conflicts
+    pub fn is_conflict(&self,start_va:VirtAddr,end_va:VirtAddr)->bool{
+        let start_vpn=VirtPageNum::from(start_va);
+        let end_vpn=VirtPageNum::from(end_va);
+        for area in self.areas.iter() {
+            let area_start=area.vpn_range.get_start();
+            let area_end=area.vpn_range.get_end();
+            if start_vpn < area_end && end_vpn>area_start {
+                return true;
+            }
+        }
+        false
+    }
+    /// figure out if all used
+    pub fn remove_mmaped_area(&mut self,start_vpn: VirtPageNum,end_vpn:VirtPageNum)->isize{
+        // 寻找起始 VPN 和 结束 VPN 完全一致的区域
+        let target_idx = self.areas.iter().position(|area| {
+            area.vpn_range.get_start() == start_vpn && area.vpn_range.get_end() == end_vpn
+        });
+
+        if let Some(idx) = target_idx {
+            let mut area = self.areas.remove(idx);
+            // 执行真正的页表项清理和物理页帧释放
+            area.unmap(&mut self.page_table);
+            0 // 成功
+        } else {
+            -1 // 没找到完全匹配的区域
+        }
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

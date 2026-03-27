@@ -2,12 +2,10 @@
 use alloc::sync::Arc;
 
 use crate::{
-    loader::get_app_data_by_name,
-    mm::{translated_byte_buffer, translated_refmut, translated_str},
-    task::{
+    config::PAGE_SIZE, loader::get_app_data_by_name, mm::{MapPermission, VirtAddr, VirtPageNum, translated_byte_buffer, translated_refmut, translated_str}, task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, task_sys_mmap, task_sys_munmap,
-    }, timer::get_time_us,
+        suspend_current_and_run_next
+    }, timer::get_time_us
 };
 
 #[repr(C)]
@@ -128,12 +126,47 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 
 /// YOUR JOB: Implement mmap.
 pub fn sys_mmap(start: usize, len: usize, prot: usize) -> isize {
-    task_sys_mmap(start, len, prot)
+    if start%PAGE_SIZE!=0{
+        return -1;
+    }
+
+    if prot&0x7==0 || prot&!0x7!=0 {
+        return -1;
+    }
+
+    let mut permission=MapPermission::U;
+    if prot&0x1!=0 {permission|=MapPermission::R;}
+    if prot&0x2!=0 {permission|=MapPermission::W;}
+    if prot&0x4!=0 {permission|=MapPermission::X;}
+
+    let start_virtaddr=VirtAddr::from(start);
+    let end_virtaddr=VirtAddr::from((start+len+PAGE_SIZE-1)&!(PAGE_SIZE-1));
+
+    //判断是否重叠
+    let task=current_task().unwrap();
+    let mut inner=task.inner_exclusive_access();
+    if inner.memory_set.is_conflict(start_virtaddr, end_virtaddr) {
+        return -1;
+    }
+
+    inner.memory_set.insert_framed_area(start_virtaddr, end_virtaddr, permission); 
+    0
 }
 
 /// YOUR JOB: Implement munmap.
 pub fn sys_munmap(start: usize, len: usize) -> isize {
-    task_sys_munmap(start, len)
+    if start%PAGE_SIZE!=0 {
+        return -1;
+    }
+
+    let start_virtaddr=VirtAddr::from(start);
+    let end_virtaddr=VirtAddr::from((start+len+PAGE_SIZE-1)& !(PAGE_SIZE-1));
+
+    let task=current_task().unwrap();
+    let mut inner=task.inner_exclusive_access();
+    let start_vpn=VirtPageNum::from(start_virtaddr);
+    let end_vpn=VirtPageNum::from(end_virtaddr);
+    inner.memory_set.remove_mmaped_area(start_vpn, end_vpn)
 }
 
 /// change data segment size
@@ -148,19 +181,35 @@ pub fn sys_sbrk(size: i32) -> isize {
 
 /// YOUR JOB: Implement spawn.
 /// HINT: fork + exec =/= spawn
-pub fn sys_spawn(_path: *const u8) -> isize {
+pub fn sys_spawn(path: *const u8) -> isize {
     trace!(
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let token=current_user_token();
+    let path=translated_str(token, path);
+    if let Some(data)=get_app_data_by_name(&path){
+        let task=current_task().unwrap();
+        let new_task=task.spawn(data);
+        let pid=new_task.pid.0 as isize;
+        add_task(new_task);
+        pid
+    }else {
+        -1
+    }
 }
 
 // YOUR JOB: Set task priority.
-pub fn sys_set_priority(_prio: isize) -> isize {
+pub fn sys_set_priority(prio: isize) -> isize {
     trace!(
         "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    if prio<=1 {
+        return -1;
+    }
+    let task=current_task().unwrap();
+    let mut inner=task.inner_exclusive_access();
+    inner.prio=prio as usize;
+    prio
 }
