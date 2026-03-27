@@ -43,6 +43,36 @@ pub struct MemorySet {
 }
 
 impl MemorySet {
+
+    /// remove mapped area
+    pub fn remove_mmaped_area(&mut self,start_vpn:VirtPageNum, end_vpn:VirtPageNum)->isize{
+        let target_idx=self.areas.iter().position(|area|{
+            area.vpn_range.get_start()==start_vpn && area.vpn_range.get_end()==end_vpn
+        });
+
+        if let Some(target_idx)=target_idx {
+            let mut area=self.areas.remove(target_idx);
+            area.unmap(&mut self.page_table);
+            0
+        }else{
+            -1
+        }
+    }
+
+    /// Decide if conflicts
+    pub fn is_conflict(&self,start_va:VirtAddr,end_va:VirtAddr)->bool{
+        let start_vpn=VirtPageNum::from(start_va);
+        let end_vpn=VirtPageNum::from(end_va);
+        for area in self.areas.iter() {
+            let area_start=area.vpn_range.get_start();
+            let area_end=area.vpn_range.get_end();
+            if start_vpn < area_end && end_vpn>area_start {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Create a new empty `MemorySet`.
     pub fn new_bare() -> Self {
         Self {
