@@ -300,6 +300,47 @@ impl MemorySet {
             false
         }
     }
+    
+    /// used to map a memory
+    pub fn mmap(&mut self,start: usize, len: usize, permission: MapPermission)->isize{
+        let start_vpn=VirtPageNum::from(start);
+        let end_vpn=VirtPageNum::from(start+len);
+        for area in self.areas.iter() {
+            let area_start=area.vpn_range.get_start();
+            let area_end=area.vpn_range.get_end();
+            if area_start<end_vpn && area_end> start_vpn {
+                return -1;
+            }
+        }
+        let mut new_area=MapArea::new(start.into(),(start+len).into(),MapType::Framed,permission);
+        new_area.map(&mut self.page_table);
+        self.areas.push(new_area);
+        0
+    }
+
+    /// used to unmap a logic segment
+    pub fn munmap(&mut self, start: usize, len: usize)->isize {
+        let start_vpn=VirtPageNum::from(start);
+        let end_vpn=VirtPageNum::from(start+len);
+        let mut target_idx=None;
+        for (i, area) in self.areas.iter().enumerate() {
+            if area.vpn_range.get_start() == start_vpn {
+                if area.vpn_range.get_end() >= end_vpn {
+                    target_idx = Some(i);
+                    break;
+                } else {
+                    return -1; 
+                }
+            }
+        }
+        if let Some(idx) = target_idx {
+            let area = self.areas.remove(idx); 
+            let mut area = area;
+            area.unmap(&mut self.page_table);
+            return 0;
+        }
+        -1
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

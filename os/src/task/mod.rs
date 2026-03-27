@@ -115,3 +115,38 @@ lazy_static! {
 pub fn add_initproc() {
     add_task(INITPROC.clone());
 }
+
+/// sys_mmap
+pub fn task_sys_mmap(start:usize, len:usize, prot:usize)->isize{
+    if start % PAGE_SIZE != 0 {
+        return -1;
+    }
+
+    if (prot & !0x7 != 0) || (prot & 0x7 == 0) {
+        return -1;
+    }
+
+    let mut permission = MapPermission::U;
+    if (prot & 1) != 0 { permission |= MapPermission::R; }
+    if (prot & 2) != 0 { permission |= MapPermission::W; }
+    if (prot & 4) != 0 { permission |= MapPermission::X; }
+
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let task=inner.current_task;
+    
+    let len_aligned = (len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+    
+    inner.tasks[task].memory_set.mmap(start, len_aligned, permission)
+}
+
+/// sys_munmap
+pub fn task_sys_munmap(start:usize,len:usize)->isize {
+    if start % PAGE_SIZE !=0{
+        return -1;
+    }
+    let len_aligned = ( len + PAGE_SIZE - 1) & !(PAGE_SIZE-1);
+
+    let mut inner=TASK_MANAGER.inner.exclusive_access();
+    let task=inner.current_task;
+    inner.tasks[task].memory_set.munmap(start, len_aligned)
+}
