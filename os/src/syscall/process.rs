@@ -113,6 +113,10 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     let token=current_user_token();
     let buffers=translated_byte_buffer(token, ts as *mut u8, core::mem::size_of::<TimeVal>());
 
+    if buffers.len()==0 {
+        return -1;
+    }
+
     let data=unsafe {
         core::slice::from_raw_parts(&time_val as *const _ as *const u8, core::mem::size_of::<TimeVal>())
     };
@@ -122,6 +126,9 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
         let len=buffer.len();
         buffer.copy_from_slice(&data[start..start+len]);
         start+=len;
+    }
+    if start != core::mem::size_of::<TimeVal>() {
+        return -1;
     }
     0
 }
