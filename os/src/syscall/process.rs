@@ -104,10 +104,6 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
     let us=get_time_us();
     let time_val=TimeVal{
         sec:us/1_000_000,
@@ -132,10 +128,6 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 
 /// YOUR JOB: Implement mmap.
 pub fn sys_mmap(start: usize, len: usize, prot: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
     if start%PAGE_SIZE!=0{
         return -1;
     }
@@ -165,10 +157,6 @@ pub fn sys_mmap(start: usize, len: usize, prot: usize) -> isize {
 
 /// YOUR JOB: Implement munmap.
 pub fn sys_munmap(start: usize, len: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
     if start%PAGE_SIZE!=0 {
         return -1;
     }
