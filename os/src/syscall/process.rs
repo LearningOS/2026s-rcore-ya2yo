@@ -3,7 +3,7 @@
 use alloc::sync::Arc;
 
 use crate::{
-    config::PAGE_SIZE, fs::{OpenFlags, open_file}, mm::{MapPermission, VirtAddr, VirtPageNum, translated_refmut, translated_str}, task::{
+    config::PAGE_SIZE, fs::{OpenFlags, open_file}, mm::{MapPermission, VirtAddr, VirtPageNum, translated_byte_buffer,translated_refmut, translated_str}, task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next,
     }, timer::get_time_us
@@ -104,13 +104,23 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!("kernel: sys_get_time");
-    let us = get_time_us();
-    let token = current_user_token();
-    
-    let ts_ref = translated_refmut(token, ts);
-    ts_ref.sec = us / 1_000_000;
-    ts_ref.usec = us % 1_000_000;
+    let usec=get_time_us();
+    let time_val=TimeVal {
+        sec:usec/1_000_000,
+        usec:usec%1_000_000,
+    };
+    let len=core::mem::size_of::<TimeVal>();
+    let token=current_user_token();
+    let buffers=translated_byte_buffer(token, ts as *const u8, len);
+    let mut start=0;
+    let data=unsafe {
+        core::slice::from_raw_parts(&time_val as *const _ as *const u8 , len)
+    };
+    for buffer in buffers {
+        let len=buffer.len();
+        buffer.copy_from_slice(&data[start..start+len]);
+        start+=len;
+    }
     0
 }
 
