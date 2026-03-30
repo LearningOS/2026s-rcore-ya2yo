@@ -148,4 +148,20 @@ impl EasyFileSystem {
             (block_id - self.data_area_start_block) as usize,
         )
     }
+    /// Deallocate an inode
+    pub fn dealloc_inode(&mut self, inode_id:u32) {
+        self.inode_bitmap.dealloc(&self.block_device, inode_id as usize);
+
+        let (block_id, offset) = self.get_disk_inode_pos(inode_id);
+        get_block_cache(block_id as usize, Arc::clone(&self.block_device))
+            .lock()
+            .modify(offset, |disk_inode: &mut DiskInode| {
+                // 这里可以手动把 disk_inode 的所有字段置 0
+                // 比如 *disk_inode = DiskInode::new_file(); 或类似的初始化
+                // 至少把 nlink 和 size 置 0
+                disk_inode.nlink = 0;
+                disk_inode.size = 0;
+                // 如果有直接/间接索引块，在这里不需要管，因为 target_inode_obj.clear() 已经处理过了
+            });
+    }
 }
