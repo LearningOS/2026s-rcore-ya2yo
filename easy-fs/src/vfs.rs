@@ -304,6 +304,7 @@ impl Inode {
             target_inode_obj.clear();
             let mut fs=self.fs.lock();
             fs.dealloc_inode(inode_id);
+            drop(fs);
         }
         0
     }
