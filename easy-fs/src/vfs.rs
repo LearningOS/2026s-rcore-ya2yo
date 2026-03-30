@@ -1,3 +1,5 @@
+use crate::block_cache::block_cache_sync_all;
+
 use super::{
     get_block_cache, BlockDevice, DirEntry, DiskInode, DiskInodeType,
     EasyFileSystem, DIRENT_SZ,
@@ -133,7 +135,7 @@ impl Inode {
 
         let (block_id, block_offset) = fs.get_disk_inode_pos(new_inode_id);
         // Removed block_cache_sync_all() for performance optimization
-        // block_cache_sync_all();
+        block_cache_sync_all();
         // return inode
         Some(Arc::new(Self::new(
             block_id,
@@ -174,7 +176,7 @@ impl Inode {
             disk_inode.write_at(offset, buf, &self.block_device)
         });
         // Removed block_cache_sync_all() for performance optimization
-        // block_cache_sync_all();
+        block_cache_sync_all();
         size
     }
     /// Clear the data in current inode
@@ -189,7 +191,7 @@ impl Inode {
             }
         });
         // Removed block_cache_sync_all() for performance optimization
-        // block_cache_sync_all();
+        block_cache_sync_all();
     }
 
     /// 提升diskinode的函数到这里
@@ -237,7 +239,7 @@ impl Inode {
             root_inode.write_at(file_count*DIRENT_SZ, dirent.as_bytes(), &self.block_device)
         });
         // Removed block_cache_sync_all() for performance optimization
-        // block_cache_sync_all();
+        block_cache_sync_all();
         Some(Arc::new(Self::new(target_block_id, target_block_offset, self.fs.clone(),self.block_device.clone(), inode_id)))
     }
 
@@ -306,6 +308,7 @@ impl Inode {
             fs.dealloc_inode(inode_id);
             drop(fs);
         }
+        block_cache_sync_all();
         0
     }
     
