@@ -55,7 +55,11 @@ pub struct ProcessControlBlockInner {
     pub lock_available:Vec<usize>,
     pub semaphore_available:Vec<usize>,
     /// 每个线程已分配的资源
-    pub lock_allocation:Vec<usize>,
+    pub lock_allocation:Vec<Vec<usize>>,
+    pub semaphore_allocation:Vec<Vec<usize>>,
+    /// 每个线程需要的资源
+    pub lock_needs:Vec<Vec<usize>>,
+    pub semaphore_needs:Vec<Vec<usize>>,
 }
 
 impl ProcessControlBlockInner {
@@ -129,7 +133,10 @@ impl ProcessControlBlock {
                     deadlock_detect_enable:false,
                     lock_available:Vec::new(),
                     lock_allocation:Vec::new(),
+                    lock_needs:Vec::new(),
                     semaphore_available:Vec::new(),
+                    semaphore_allocation:Vec::new(),
+                    semaphore_needs:Vec::new(),
                 })
             },
         });
@@ -155,6 +162,10 @@ impl ProcessControlBlock {
         // add main thread to the process
         let mut process_inner = process.inner_exclusive_access();
         process_inner.tasks.push(Some(Arc::clone(&task)));
+        process_inner.lock_allocation.push(vec![]);
+        process_inner.lock_needs.push(vec![]);
+        process_inner.semaphore_allocation.push(vec![]);
+        process_inner.semaphore_needs.push(vec![]);
         drop(process_inner);
         insert_into_pid2process(process.getpid(), Arc::clone(&process));
         // add main thread to scheduler
@@ -258,8 +269,11 @@ impl ProcessControlBlock {
                     condvar_list: Vec::new(),
                     deadlock_detect_enable:parent.deadlock_detect_enable,
                     lock_available:Vec::new(),
-                    lock_allocation:Vec::new(),
+                    lock_allocation:vec![vec![]],
+                    lock_needs:vec![vec![]],
                     semaphore_available:Vec::new(),
+                    semaphore_allocation:vec![vec![]],
+                    semaphore_needs:vec![vec![]],
                 })
             },
         });
