@@ -182,11 +182,9 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
         .find(|(_, item)| item.is_none())
         .map(|(id, _)| id)
     {
-        process_inner.semaphore_available[id]=res_count;
         process_inner.semaphore_list[id] = Some(Arc::new(Semaphore::new(res_count)));
         id
     } else {
-        process_inner.semaphore_available.push(res_count);
         process_inner
             .semaphore_list
             .push(Some(Arc::new(Semaphore::new(res_count))));
