@@ -53,6 +53,7 @@ pub struct ProcessControlBlockInner {
     pub deadlock_detect_enable:bool,
     /// 可用资源向量
     pub lock_available:Vec<usize>,
+    pub semaphore_available:Vec<usize>,
     /// 每个线程已分配的资源
     pub lock_allocation:Vec<usize>,
 }
@@ -128,6 +129,7 @@ impl ProcessControlBlock {
                     deadlock_detect_enable:false,
                     lock_available:Vec::new(),
                     lock_allocation:Vec::new(),
+                    semaphore_available:Vec::new(),
                 })
             },
         });
@@ -257,6 +259,7 @@ impl ProcessControlBlock {
                     deadlock_detect_enable:parent.deadlock_detect_enable,
                     lock_available:Vec::new(),
                     lock_allocation:Vec::new(),
+                    semaphore_available:Vec::new(),
                 })
             },
         });

@@ -131,9 +131,11 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
         .find(|(_, item)| item.is_none())
         .map(|(id, _)| id)
     {
+        process_inner.semaphore_available[id]=res_count;
         process_inner.semaphore_list[id] = Some(Arc::new(Semaphore::new(res_count)));
         id
     } else {
+        process_inner.semaphore_available.push(res_count);
         process_inner
             .semaphore_list
             .push(Some(Arc::new(Semaphore::new(res_count))));
@@ -155,7 +157,10 @@ pub fn sys_semaphore_up(sem_id: usize) -> isize {
             .tid
     );
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.inner_exclusive_access();
+    if process_inner.deadlock_detect_enable {
+        process_inner.semaphore_available[sem_id]+=1;
+    }
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     drop(process_inner);
     sem.up();
@@ -175,7 +180,13 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
             .tid
     );
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.inner_exclusive_access();
+    if process_inner.deadlock_detect_enable {
+        if process_inner.semaphore_available[sem_id]==0 {
+            return -0xDEAD;
+        }
+        process_inner.semaphore_available[sem_id]-=1;
+    }
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     drop(process_inner);
     sem.down();
