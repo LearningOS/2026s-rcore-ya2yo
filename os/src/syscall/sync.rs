@@ -48,9 +48,13 @@ pub fn sys_mutex_create(blocking: bool) -> isize {
         .find(|(_, item)| item.is_none())
         .map(|(id, _)| id)
     {
+        process_inner.lock_allocation[id]=0;
+        process_inner.lock_available[id]=1;
         process_inner.mutex_list[id] = mutex;
         id as isize
     } else {
+        process_inner.lock_available.push(1);
+        process_inner.lock_allocation.push(0);
         process_inner.mutex_list.push(mutex);
         process_inner.mutex_list.len() as isize - 1
     }
@@ -69,7 +73,11 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
             .tid
     );
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.inner_exclusive_access();
+    if process_inner.deadlock_detect_enable {
+        process_inner.lock_available[mutex_id]+=1;
+        process_inner.lock_allocation[mutex_id]-=1;
+    }
     let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
     drop(process_inner);
     drop(process);
@@ -90,7 +98,11 @@ pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
             .tid
     );
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.inner_exclusive_access();
+    if process_inner.deadlock_detect_enable {
+        process_inner.lock_available[mutex_id]+=1;
+        process_inner.lock_allocation[mutex_id]-=1;
+    }
     let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
     drop(process_inner);
     drop(process);
